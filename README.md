@@ -58,6 +58,6 @@ Certified Ethical Hacker (CEH) students
 ├── step2_decrypt_passwords.go  # Reads login data and decrypts saved passwords
 ├── go.mod / go.sum              # Dependencies
 ```
-### 🙏 Credits
+## 🙏 Credits
 Inspired by red team lab techniques & real-world malware analysis.
 Built with ❤️ for learning, not harm.
