@@ -1,3 +1,6 @@
+```gcc should be installed```
+```PS : $env:CGO_ENABLED="1"; go build -o chrome_decrypt_full.exe full_decrypt_chrome.go ```
+
 package main
 
 import (
