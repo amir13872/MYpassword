@@ -29,6 +29,8 @@ Chrome stores user credentials encrypted on disk using Windows DPAPI and AES-GCM
 
 ```bash
 GOOS=windows GOARCH=amd64 go build -o step1_key_extract.exe step1_key_extract.go
+or
+$env:CGO_ENABLED="1"; go build -o myblock.exe .\step3.go
 ```
 Run step1_key_extract.exe on a Windows system with Chrome installed to get the decrypted AES key.
 
